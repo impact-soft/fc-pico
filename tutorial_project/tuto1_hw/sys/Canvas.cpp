@@ -2,19 +2,6 @@
     Canvas.h - Simple canvas.
  */
 
-/**
- * @file Canvas.cpp
- * @brief Implementation of the software rasteriser.
- * @ingroup graphics
- *
- * Triangle filling is 16.16 fixed-point edge stepping; spans are depth-tested and
- * dithered as they are written. Sprite and glyph drawing decode NES 2bpp tiles on
- * demand into a 64-byte scratch buffer.
- *
- * @see Canvas.h, @ref graphics_page
- */
-
-
 #include "Arduino.h"
 #include "Canvas.h"
 
@@ -330,9 +317,7 @@ void Canvas::drawSPR_WH( int x, int y, int cw, int ch ) {
 }
 
 //#define swap(type,a,b) do{type _c;_c=a;a=b;b=_c;}while(0)
-/// @brief Swaps two ints; used when sorting triangle vertices by Y.
 #define swap_int(a,b) do{int _c;_c=a;a=b;b=_c;}while(0)
-/// @brief Integer absolute value.
 #define ABS(x) ((x) < 0 ? -(x) : (x))
 
 // この関数は将来的にサブコアに負荷分散する

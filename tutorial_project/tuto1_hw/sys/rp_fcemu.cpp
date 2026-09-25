@@ -23,20 +23,6 @@
   along with FabGL.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/**
- * @file rp_fcemu.cpp
- * @brief Implementation of the 6502 interpreter used by the sound driver.
- * @ingroup audio
- *
- * Implements the documented instruction set plus decimal mode and the common
- * undocumented opcodes. Every write in `\`-`\` is forwarded to
- * rp_system::setAPU(), which is the emulator's only effect on the outside world.
- *
- * @note Derived from FabGL and therefore GPL v3. @see @ref references
- * @see rp_fcemu.h, @ref audio_page
- */
-
-
 #include "Arduino.h"
  
 #include "rp_system.h"
@@ -44,12 +30,10 @@
  
  
 // compose status word
-/// @brief Packs the individual flag variables into a 6502 status byte.
 #define COMPOSE_STATUS (0x20 | ((int)m_carry) | ((int)m_zero << 1) | ((int)m_intDisable << 2) | ((int)m_decimal << 3) | ((int)m_overflow << 6) | ((int) m_negative << 7))
  
  
 // decompose status word
-/// @brief Unpacks a 6502 status byte back into the individual flag variables.
 #define DECOMPOSE_STATUS(status) { \
   int s = (status); \
   m_carry      = s & 0x01; \
@@ -62,30 +46,20 @@
 }
  
  
-/// @brief Reads a byte through the full emulated memory map.
 #define BUSREAD(addr)           ( readByte( (addr) ) )
-/// @brief Writes a byte through the full emulated memory map; `$4000`-`$4017` reaches the console's APU.
 #define BUSWRITE(addr, value)   ( writeByte( (addr), (value)))
-/// @brief Fast zero-page read, bypassing the address decode.
 #define PAGE0READ(addr)         ( readByteP0( (addr)))
-/// @brief Fast zero-page write, bypassing the address decode.
 #define PAGE0WRITE(addr, value) ( writeByteP0( (addr), (value)))
-/// @brief Fast stack-page read (`$0100`-`$01FF`).
 #define PAGE1READ(addr)         ( readByteP1( (addr)))
-/// @brief Fast stack-page write (`$0100`-`$01FF`).
 #define PAGE1WRITE(addr, value) ( writeByteP1( (addr), (value)))
  
  
-/// @brief Pushes one byte and post-decrements the stack pointer.
 #define STACKPUSHBYTE(v) PAGE1WRITE(m_SP--, (v))
  
-/// @brief Pushes a 16-bit value, high byte first, as the 6502 does.
 #define STACKPUSHWORD(v) { PAGE1WRITE(m_SP--, (v) >> 8); PAGE1WRITE(m_SP--, (v) & 0xff); }
  
-/// @brief Pre-increments the stack pointer and pops one byte.
 #define STACKPOPBYTE()   PAGE1READ(++m_SP)
  
-/// @brief Pops a 16-bit value, low byte first.
 #define STACKPOPWORD()   (m_SP += 2, (PAGE1READ(m_SP - 1) | (PAGE1READ(m_SP) << 8)))
  
 
@@ -261,7 +235,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Bitwise AND into the accumulator; sets N and Z.
 #define OP_AND {            \
   m_A        = m & m_A;     \
   m_zero     = !m_A;        \
@@ -269,7 +242,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Arithmetic shift left; the shifted-out bit becomes carry.
 #define OP_ASL {                \
   m_carry    = m & 0x80;        \
   m          = (m << 1) & 0xff; \
@@ -278,7 +250,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Tests bits against the accumulator; copies bits 7 and 6 into N and V.
 #define OP_BIT {           \
   m_zero     = !(m & m_A); \
   m_overflow = m & 0x40;   \
@@ -286,7 +257,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Compares the accumulator with the operand; sets N, Z and C.
 #define OP_CMP {             \
     uint32_t t = m_A - m;      \
   m_zero     = !(t & 0xff);  \
@@ -295,7 +265,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Compares the X register with the operand.
 #define OP_CPX {             \
     uint32_t t = m_X - m;      \
   m_zero     = !(t & 0xff);  \
@@ -304,7 +273,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Compares the Y register with the operand.
 #define OP_CPY {             \
     uint32_t t = m_Y - m;      \
   m_zero     = !(t & 0xff);  \
@@ -313,7 +281,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Decrements the operand in place.
 #define OP_DEC {                \
     m          = (m - 1) & 0xff;  \
   m_zero     = !m;              \
@@ -321,7 +288,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Bitwise exclusive-OR into the accumulator.
 #define OP_EOR {            \
     m_A       ^= m;           \
   m_zero     = !m_A;        \
@@ -329,7 +295,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Increments the operand in place.
 #define OP_INC {                \
   m          = (m + 1) & 0xff;  \
     m_negative = m & 0x80;        \
@@ -337,7 +302,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Loads the accumulator; sets N and Z.
 #define OP_LDA {          \
   m_zero     = !m;        \
     m_negative = m & 0x80;  \
@@ -345,7 +309,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Loads the X register; sets N and Z.
 #define OP_LDX {          \
   m_zero     = !m;        \
     m_negative = m & 0x80;  \
@@ -353,7 +316,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Loads the Y register; sets N and Z.
 #define OP_LDY {          \
   m_zero     = !m;        \
     m_negative = m & 0x80;  \
@@ -361,7 +323,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Logical shift right; the shifted-out bit becomes carry.
 #define OP_LSR {          \
   m_negative = false;     \
     m_carry    = m & 0x01;  \
@@ -370,7 +331,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Bitwise OR into the accumulator.
 #define OP_ORA {             \
     m_A        |= m;           \
     m_negative  = m_A & 0x80;  \
@@ -378,7 +338,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Rotates left through the carry flag.
 #define OP_ROL {                         \
   m           = (m << 1) | (int)m_carry; \
   m_carry     = m & 0x100;               \
@@ -388,7 +347,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief Rotates right through the carry flag.
 #define OP_ROR {  \
   m          |= (int)m_carry << 8; \
   m_carry     = m & 0x01;          \
@@ -398,23 +356,19 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
 }
  
  
-/// @brief True when the effective address crossed a page boundary, costing an extra cycle.
 #define PAGECROSS() (al >> 8)
  
  
 // immediate: op #dd
-/// @brief Immediate: the operand is the byte following the opcode.
 #define ADR_IMM {       \
   m = BUSREAD(m_PC++);  \
 }
  
  
 // zero page absolute: op aa
-/// @brief Zero page: computes the effective address only.
 #define ADR_ZABS_GETADDR { \
   a = BUSREAD(m_PC++);     \
 }
-/// @brief Zero page: computes the address and fetches the operand.
 #define ADR_ZABS {         \
   ADR_ZABS_GETADDR;        \
   m = PAGE0READ(a);        \
@@ -422,11 +376,9 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // zero page absolute + X: op aa, X
-/// @brief Zero page indexed by X: computes the effective address only. Wraps within the page.
 #define ADR_ZABSX_GETADDR {           \
   a = (BUSREAD(m_PC++) + m_X) & 0xff; \
 }
-/// @brief Zero page indexed by X: computes the address and fetches the operand.
 #define ADR_ZABSX {                   \
   ADR_ZABSX_GETADDR;                  \
   m = PAGE0READ(a);                   \
@@ -434,11 +386,9 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // zero page absolute + Y: op aa, Y
-/// @brief Zero page indexed by Y: computes the effective address only. Wraps within the page.
 #define ADR_ZABSY_GETADDR {           \
   a = (BUSREAD(m_PC++) + m_Y) & 0xff; \
 }
-/// @brief Zero page indexed by Y: computes the address and fetches the operand.
 #define ADR_ZABSY {                   \
   ADR_ZABSY_GETADDR;                  \
   m = PAGE0READ(a);                   \
@@ -446,12 +396,10 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // absolute: op aaaa
-/// @brief Absolute: computes the effective address only.
 #define ADR_ABS_GETADDR {                       \
   a = BUSREAD(m_PC) | (BUSREAD(m_PC + 1) << 8); \
   m_PC += 2;                                    \
 }
-/// @brief Absolute: computes the address and fetches the operand.
 #define ADR_ABS {                               \
   ADR_ABS_GETADDR;                              \
   m = BUSREAD(a);                               \
@@ -459,12 +407,10 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // absolute + X: op aaaa, X
-/// @brief Absolute indexed by X: computes the effective address only.
 #define ADR_ABSX_GETADDR {               \
   al = BUSREAD(m_PC++) + m_X;            \
   a  = al + (BUSREAD(m_PC++) << 8);      \
 }
-/// @brief Absolute indexed by X: computes the address and fetches the operand; may cross a page.
 #define ADR_ABSX {                       \
   ADR_ABSX_GETADDR;                      \
   m  = BUSREAD(a);                       \
@@ -472,12 +418,10 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // absolute + Y: op aaaa, Y
-/// @brief Absolute indexed by Y: computes the effective address only.
 #define ADR_ABSY_GETADDR {               \
   al = BUSREAD(m_PC++) + m_Y;            \
   a  = al + (BUSREAD(m_PC++) << 8);      \
 }
-/// @brief Absolute indexed by Y: computes the address and fetches the operand; may cross a page.
 #define ADR_ABSY {                       \
   ADR_ABSY_GETADDR;                      \
   m  = BUSREAD(a);                       \
@@ -485,13 +429,11 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // indexed indirect: op (aa, X)
-/// @brief Indexed indirect `(zp,X)`: computes the effective address only.
 #define ADR_IIND_GETADDR {                    \
   int l = (BUSREAD(m_PC++) + m_X) & 0xff;     \
   int h = (l + 1) & 0xff;                     \
   a     = PAGE0READ(l) | (PAGE0READ(h) << 8); \
 }
-/// @brief Indexed indirect `(zp,X)`: computes the address and fetches the operand.
 #define ADR_IIND {                            \
   ADR_IIND_GETADDR;                           \
   m     = BUSREAD(a);                         \
@@ -499,14 +441,12 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // indirect index: op (aa), Y
-/// @brief Indirect indexed `(zp),Y`: computes the effective address only.
 #define ADR_INDI_GETADDR {          \
   int l = BUSREAD(m_PC++);          \
   int h = (l + 1) & 0xff;           \
   al    = PAGE0READ(l) + m_Y;       \
   a     = al + (PAGE0READ(h) << 8); \
 }
-/// @brief Indirect indexed `(zp),Y`: computes the address and fetches the operand; may cross a page.
 #define ADR_INDI {                  \
   ADR_INDI_GETADDR;                 \
   m     = BUSREAD(a);               \
@@ -514,7 +454,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // relative: op aa
-/// @brief Relative: signed 8-bit branch displacement from the following instruction.
 #define ADR_REL {               \
   m  = (int8_t)BUSREAD(m_PC++); \
   a  = m_PC + m;                \
@@ -523,7 +462,6 @@ void rp_fcemu::OP_BCDSBC(uint8_t m)
  
  
 // indirect: op (aaaa)
-/// @brief Indirect `(abs)`, used only by JMP. Reproduces the 6502 page-wrap bug in the pointer fetch.
 #define ADR_IND {                                   \
   int l = BUSREAD(m_PC++);                          \
   int h = BUSREAD(m_PC++);                          \

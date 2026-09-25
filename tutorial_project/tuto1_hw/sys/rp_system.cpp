@@ -2,22 +2,6 @@
     rp_system.h
  */
 
-/**
- * @file rp_system.cpp
- * @brief Implementation of the cartridge bus interface.
- * @ingroup fcbus
- *
- * Also where the boot ROM image is served from: rom_dma() and ver_dma() read it
- * out of the packed resource archive with `getResData( NES_ROM )`, skipping the
- * 16-byte iNES header, so the pointer they stream from is CPU `$8000`. The
- * commented-out `#include "../res/rom.c"` below is the older arrangement, when
- * the image was a standalone array in this translation unit.
- * See @ref generated_resources.
- *
- * @see rp_system.h for the API and the protocol constants.
- */
-
-
 
 
 
@@ -26,11 +10,6 @@
 #include "rp_system.h"
 
 #include "Canvas.h"
-
-//#include "../res/rom.c"
-
-
-
 
 
 rp_system::rp_system(void) {

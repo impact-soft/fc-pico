@@ -3,19 +3,6 @@
  
  */
 
-/**
- * @file rp_nsfplayer.cpp
- * @brief Implementation of the NSD.Lib NSF player.
- * @ingroup audio
- *
- * Carries a Japanese translation of the NSF specification's init/play procedure
- * as reference material.
- *
- * @note Derived from FabGL and therefore GPL v3. @see @ref references
- * @see rp_nsfplayer.h, @ref audio_page
- */
-
-
 #include "Arduino.h"
  
 #include "rp_system.h"

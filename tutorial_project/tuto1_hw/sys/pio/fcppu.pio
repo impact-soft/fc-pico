@@ -4,75 +4,26 @@
 ; SPDX-License-Identifier: BSD-3-Clause
 ;
 
-;/// @file fcppu.pio
-;/// @brief PIO programs that make the RP2350 behave like a Famicom CHR-ROM.
-;/// @ingroup fcbus
-;///
-;/// Four state machines cooperate on PIO0, one per concern:
-;///
-;/// | SM | Program      | Role |
-;/// |----|--------------|------|
-;/// | 0  | ::fcppu_w    | Capture bytes the 6502 writes to `$2007` |
-;/// | 1  | ::fcppu_r    | Drive the outgoing byte stream on every PPU read |
-;/// | 2  | ::fcppu_dir  | Turn the data bus around so it is driven only during a read |
-;/// | 3  | ::fcppu_rna  | Count PPU reads so the frame stream can be resynchronised |
-;///
-;/// Every program gates on the same `jmp PIN` predicate wired to #PI_CS1_BIT, so
-;/// accesses that are not selecting this cartridge are skipped without consuming
-;/// FIFO data.
-;///
-;/// @note The PPU **address** lines are deliberately not connected. The PPU
-;///       fetches in a fixed per-scanline order, so position within the frame can
-;///       be tracked by counting read strobes alone -- this is the core of the
-;///       NES-DOOM technique. @see @ref nes_doom
-;/// @warning Timing here depends on genuine Famicom PPU bus behaviour. Clone
-;///          consoles often differ slightly and may not work.
-
-;/// @brief PIO IRQ flag used to hand bus-direction control from ::fcppu_r to ::fcppu_dir.
 .define		IRQ_DIR		7
 
 ; input pins
-;/// @brief PPU write strobe `/WR`, active low. GP21.
 .define public	PI_WR_BIT	21
-;/// @brief PPU read strobe `/RD`, active low. GP20.
 .define public	PI_RD_BIT	20
 ;.define public	PI_PA13_BIT	19
 ;.define public	PI_PA12_BIT	18
-;/// @brief PPU chip select for pattern-table space. GP17.
-;/// @details Used as the `jmp PIN` predicate by every program: when it is high
-;///          the access belongs to someone else and is ignored.
 .define public	PI_CS1_BIT	17
 ;.define public	PI_OD_DIR_BIT	16
 
 ; bi-directional pins
-;/// @brief PPU data bus D7. GP13. @details D0..D7 occupy GP6..GP13 contiguously.
 .define public	PI_D7_BIT	13
-;/// @brief PPU data bus D6. GP12.
 .define public	PI_D6_BIT	12
-;/// @brief PPU data bus D5. GP11.
 .define public	PI_D5_BIT	11
-;/// @brief PPU data bus D4. GP10.
 .define public	PI_D4_BIT	10
-;/// @brief PPU data bus D3. GP9.
 .define public	PI_D3_BIT	9
-;/// @brief PPU data bus D2. GP8.
 .define public	PI_D2_BIT	8
-;/// @brief PPU data bus D1. GP7.
 .define public	PI_D1_BIT	7
-;/// @brief PPU data bus D0. GP6. Base pin for all shifts; see #PI_DATA_SHIFT.
 .define public	PI_D0_BIT	6
 
-;/// @brief Receive path: captures one byte per qualifying PPU **write**.
-;/// @ingroup fcbus
-;///
-;/// Waits for `/WR` to fall, skips the access if the cartridge is not selected,
-;/// then samples the bus on the **rising** edge of `/WR` -- the point at which
-;/// the console guarantees the data is valid. Autopush delivers the word to the
-;/// RX FIFO, which raises `PIO0_IRQ_0` and lands in rp_system::jobRcvCom().
-;///
-;/// @note `in pins, 32` shifts the whole GPIO word in; only the low 8 bits are
-;///       meaningful and rp_system::getRcvCom() masks the rest away.
-;/// @see rp_system::jobRcvCom, SM_RECV
 .program fcppu_w
 .wrap_target
 	wait 0 gpio PI_WR_BIT
@@ -83,18 +34,6 @@ skip_ppu_data0:
 	wait 1 gpio PI_WR_BIT
 .wrap
 
-;/// @brief Transmit path: presents one byte per qualifying PPU **read**.
-;/// @ingroup fcbus
-;///
-;/// On a falling `/RD` with the cartridge selected, raises #IRQ_DIR to tell
-;/// ::fcppu_dir to drive the bus, then shifts eight bits out. Autopull keeps the
-;/// OSR fed from the TX FIFO, which the DMA channel refills continuously, so the
-;/// PPU's own fetches are what clock the framebuffer out of the RP2350.
-;///
-;/// @warning The FIFO must never run dry mid-frame: there is no flow control, and
-;///          a starved read puts stale data on the bus. rp_system::ppu_dma()
-;///          re-arms the transfer once per frame to prevent this.
-;/// @see SM_TRAN, rp_dma::TransSM_DMA
 .program fcppu_r
 	mov  osr, null
 .wrap_target
@@ -107,17 +46,6 @@ skip_ppu_data:
 .wrap
 
 
-;/// @brief Bus-direction control: drives D0..D7 only for the duration of a read.
-;/// @ingroup fcbus
-;///
-;/// Starts with the data pins as inputs. When ::fcppu_r signals #IRQ_DIR, this
-;/// program sets all eight `pindirs` to output (`~null`), clears the flag, and
-;/// then waits for `/RD` to rise before releasing the bus again.
-;///
-;/// @warning Holding a shared bus driven outside its access window is what makes
-;///          a cartridge fight the console. This program exists solely to keep
-;///          that window tight.
-;/// @see SM_BUSDIR
 .program fcppu_dir
 .wrap_target
 	mov  osr, null
@@ -132,18 +60,6 @@ dir_in:
 	wait 1 gpio PI_RD_BIT
 .wrap
 
-;/// @brief Read counter: tracks how far through the frame the PPU has got.
-;/// @ingroup fcbus
-;///
-;/// X is preset to `0xFFFFFFFF` and decremented once per qualifying read; the
-;/// inverted value is autopushed, so the FIFO always holds a running count.
-;/// Since the PPU's fetch order is fixed, this count *is* the position within
-;/// the frame -- which is why no address lines are needed.
-;///
-;/// rp_system::ppu_dma() samples it once per frame and compares it against
-;/// #PPU_COUNT_VAL to decide whether the stream is still in phase.
-;///
-;/// @see SM_TRCNT, PPU_COUNT_VAL
 .program fcppu_rna
 	mov  x, ~null
 .wrap_target

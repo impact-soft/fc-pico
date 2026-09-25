@@ -1,33 +1,11 @@
-/**
- * @file rp_core1.h
- * @brief Core 1: audio, and the watchdog handover.
- * @ingroup platform
- *
- * Core 1 is a message pump on the inter-core FIFO. Its real work is one call to
- * rp_sound::jobSound() per frame, triggered by #C1_SNDJOB; when idle it decodes
- * streamed MP3 audio and covers the watchdog on core 0's behalf.
- *
- * @see @ref architecture, @ref audio_page
- */
 
 
-/**
- * @brief Core 1 startup; also re-run on #C1_RESET after a soft reset.
- */
+
 void setup1() {
 	snd.init();
 }
 
 
-/**
- * @brief Core 1 main loop: drains the inter-core FIFO, or decodes MP3 when idle.
- * @details #C1_SND_MP3PLAY is a tagged command carrying a track index in its low
- *          byte, so it is matched on its high byte before the plain values are
- *          compared. #C1_SNDJOB advances the sound driver by one frame and then
- *          packs the resulting APU writes into the outgoing mailbox.
- * @note WDT_check() runs first so that a stalled core 0 is detected even when no
- *       messages are arriving. @see setWDT_mode
- */
 void loop1() {
 	WDT_check();
 

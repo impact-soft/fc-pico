@@ -4,69 +4,38 @@
     fabio914 at gmail.com
  */
 
-/**
- * @file ArduinoGL.cpp
- * @brief Implementation of the OpenGL subset: matrix maths, culling and lighting.
- * @ingroup graphics
- *
- * The interesting part is the lighting model. With only four colours available,
- * `getLightData()` converts the cosine between the face normal and the light
- * vector into a dither level rather than an intensity, which is what gives the
- * renderer its apparent shading.
- *
- * @see ArduinoGL.h, @ref graphics_page
- */
-
-
 #include "ArduinoGL.h"
-/// @brief Maximum vertices in one glBegin()/glEnd() primitive.
-/// @warning Not checked at runtime; emitting more silently overruns the array.
 #define MAX_VERTICES 24
-/// @brief Depth of each matrix stack.
 #define MAX_MATRICES 8
 
 #include "Canvas.h"
 
 
-/// @brief Degrees-to-radians conversion factor.
 #define DEG2RAD (M_PI/180.0)
 
 
-/// @brief The canvas being rendered into.
-/// @warning Null until glUseCanvas() is called, and glEnd() returns
-///          immediately while it is. The tutorial never sets it.
 Canvas * glCanvas = NULL;
-/// @brief Primitive type currently being assembled.
 GLDrawMode glDrawMode = GL_NONE;
 
-/// @brief Transformed vertices after the perspective divide, in NDC.
 GLVertex glVertices[MAX_VERTICES];
-/// @brief The same vertices before the divide, in clip space.
-/// @details Lighting needs unprojected positions, so both forms are kept.
 GLVertex glVertices2[MAX_VERTICES];
-/// @brief Vertices emitted since glBegin().
 unsigned glVerticesCount = 0;
 
-/// @brief Direction the light travels, set by setLight().
 float light_vector[3];
-/// @brief View direction recorded by gluLookAt(); backface culling tests against it.
-/// @note The name is a typo for "lookAt" in the original source, kept for compatibility.
 float vlootAt[3];
-float normal_vector[3];	///< Face normal of the triangle being lit. // 法線ベクトル
+float normal_vector[3];	// 法線ベクトル
 
-float dv0[3];   ///< Scratch edge vector used by polygon_light().
-float dv1[3];   ///< Scratch edge vector used by polygon_light().
-int dvi0[3];    ///< Integer scratch vector for culling.
-int dvi1[3];    ///< Integer scratch vector for culling.
+float dv0[3];
+float dv1[3];
+int dvi0[3];
+int dvi1[3];
 
-GLMatrixMode glmatrixMode = GL_PROJECTION;   ///< Which matrix stack matrix calls currently target.
-/// @brief The two active matrices, indexed by GLMatrixMode.
+GLMatrixMode glmatrixMode = GL_PROJECTION;
 float glMatrices[2][16];
-/// @brief Backing store for glPushMatrix() / glPopMatrix().
 float glMatrixStack[MAX_MATRICES][16];
-unsigned glMatrixStackTop = 0;   ///< Next free slot in #glMatrixStack.
+unsigned glMatrixStackTop = 0;
 
-unsigned glPointLength = 1;   ///< Point size used for #GL_POINTS, set by glPointSize().
+unsigned glPointLength = 1;
 
 /* Aux functions */
 void copyMatrix(float * dest, float * src) {
@@ -79,12 +48,6 @@ void copyMatrix(float * dest, float * src) {
         dest[i] = src[i];
 }
 
-/**
- * @brief Multiplies two 4x4 matrices.
- * @param dest Destination; may not alias the sources.
- * @param src1 Left operand.
- * @param src2 Right operand.
- */
 void multMatrix(float * dest, float * src1, float * src2) {
     
     int i, j, k;
@@ -103,10 +66,6 @@ void multMatrix(float * dest, float * src1, float * src2) {
         dest[i] = m[i];
 }
 
-/**
- * @brief Pushes a matrix onto the shared stack.
- * @param m Matrix to save.
- */
 void pushMatrix(float * m) {
     
     if(glMatrixStackTop < MAX_MATRICES) {
@@ -116,7 +75,6 @@ void pushMatrix(float * m) {
     }
 }
 
-/// @brief Pops the most recently pushed matrix.
 void popMatrix(void) {
     
     if(glMatrixStackTop > 0) {
@@ -125,12 +83,6 @@ void popMatrix(void) {
     }
 }
 
-/**
- * @brief Transforms a vertex by a matrix.
- * @param m Column-major 4x4 matrix.
- * @param v Vertex to transform.
- * @return The transformed vertex, still in homogeneous coordinates.
- */
 GLVertex multVertex(float * m, GLVertex v) {
     
     GLVertex ret;
@@ -143,11 +95,6 @@ GLVertex multVertex(float * m, GLVertex v) {
     return ret;
 }
 
-/**
- * @brief Copies a 3-vector.
- * @param dest Destination.
- * @param src Source.
- */
 void copyVector3(float * dest, float * src) {
 	for(int i = 0; i < 3; i++) {
 		dest[i] = src[i];
@@ -158,11 +105,6 @@ void copyVector3(float * dest, float * src) {
 //------------------------------
 //		ベクトル正規化
 //------------------------------
-/**
- * @brief Normalises a 3-vector to unit length.
- * @param dest Destination; may alias @p src.
- * @param src Source.
- */
 void normVector3(float * dest, float * src) {
     
     float norm;
@@ -178,12 +120,6 @@ void normVector3(float * dest, float * src) {
 //------------------------------
 //		ベクトルの外積（クロス積）
 //------------------------------
-/**
- * @brief Cross product of two 3-vectors.
- * @param dest Destination.
- * @param src1 Left operand.
- * @param src2 Right operand.
- */
 void crossVector3(float * dest, float * src1, float * src2) {
 
     copyVector3( dv0, src1);
@@ -199,34 +135,17 @@ void crossVector3(float * dest, float * src1, float * src2) {
 //------------------------------
 //ベクトル内積
 //------------------------------
-/**
- * @brief Dot product of two 3-vectors.
- * @param vl Left operand.
- * @param vr Right operand.
- * @return The scalar product.
- */
 float dotVector3( float *vl, float *vr) {
     return vl[0] * vr[0] + vl[1] * vr[1] + vl[2] * vr[2];
 }
 
 
 //ベクトル内積
-/**
- * @brief Dot product of two vertices, ignoring w.
- * @param vl Left operand.
- * @param vr Right operand.
- * @return The scalar product.
- */
 float dot_product( const GLVertex& vl, const GLVertex vr) {
     return vl.x * vr.x + vl.y * vr.y + vl.z * vr.z;
 }
 
 //ベクトルの長さを計算する
-/**
- * @brief Euclidean length of a 3-vector.
- * @param v The vector.
- * @return Its magnitude.
- */
 float get_vector_length( float *v ) {
 	return sqrt( ( v[0] * v[0] ) + ( v[1] * v[1] ) + ( v[2] * v[2] ) );
 }
@@ -234,12 +153,6 @@ float get_vector_length( float *v ) {
 
 //２つのベクトルABのなす角度θを求める
 // ベクトル A B は正規化してセットする
-/**
- * @brief Cosine of the angle between two 3-vectors.
- * @param A First vector.
- * @param B Second vector.
- * @return The cosine, in the range -1..1.
- */
 float AngleOf2Vector( float *A, float *B ) {
 	//※ベクトルの長さが0だと答えが出ませんので注意してください。
 
@@ -261,18 +174,6 @@ float AngleOf2Vector( float *A, float *B ) {
 
 //２つのベクトルABのなす角度θを求める
 // ベクトル A B は正規化してセットする
-/**
- * @brief Converts a light/normal angle into a dither level.
- * @param A Light vector.
- * @param B Surface normal.
- * @return A dither level for Canvas::setDitherNo(), 0..15.
- *
- * @details This is the whole lighting model. With only four colours
- *          available there is no intensity to vary, so brightness is
- *          expressed as dither density instead: surfaces facing away map to
- *          the sparse end of the range, surfaces facing the light to the
- *          dense end. @see @ref graphics_page
- */
 int getLightData( float *A, float *B ) {
 	//※ベクトルの長さが0だと答えが出ませんので注意してください。
 	float dt = 0;
@@ -294,18 +195,6 @@ int getLightData( float *A, float *B ) {
 
 // ベクトルvに対してポリゴンが表裏どちらを向くかを求める
 // 戻り値    0:表    1:裏    -1:エラー
-/**
- * @brief Determines which way a triangle faces relative to a view vector.
- * @param A First vertex.
- * @param B Second vertex.
- * @param C Third vertex.
- * @param v View direction, normally #vlootAt.
- * @retval 0 Front-facing.
- * @retval 1 Back-facing.
- * @retval -1 Edge-on.
- * @note Backface culling; edge-on triangles are discarded because they
- *       would rasterise to nothing but still cost fill time.
- */
 int polygon_side_chk( GLVertex& A, GLVertex& B, GLVertex& C, float*v ) {
 
     //ABCが三角形かどうか。ベクトルvが0でないかの判定は省略します
@@ -340,14 +229,6 @@ int polygon_side_chk( GLVertex& A, GLVertex& B, GLVertex& C, float*v ) {
 }
 
 // ポリゴンの光源処理
-/**
- * @brief Computes a triangle's face normal and applies the resulting shade.
- * @param A First vertex.
- * @param B Second vertex.
- * @param C Third vertex.
- * @details Cross product, normalise, then hand the light/normal angle to
- *          getLightData() and the result to Canvas::setDitherNo().
- */
 void polygon_light( GLVertex& A, GLVertex& B, GLVertex& C ) {
 
     //ABCが三角形かどうか。ベクトルvが0でないかの判定は省略します
@@ -646,14 +527,6 @@ void glBegin(GLDrawMode mode) {
     glVerticesCount = 0;
 }
 
-/**
- * @brief Rough visibility test for a transformed vertex.
- * @param glVertices The vertex to test, in normalised device coordinates.
- * @return True if it might be on screen.
- * @warning Deliberately permissive: the three axis tests are combined with OR
- *          rather than AND, so this only rejects a vertex outside the view on
- *          every axis at once. It is a fill-rate optimisation, not a clipper.
- */
 bool isDispArea( GLVertex *glVertices ) {
 	if( glVertices->x >= -1.0 && glVertices->x <= 1.0)  return true;
 	if( glVertices->y >= -1.0 && glVertices->y <= 1.0)  return true;

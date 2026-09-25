@@ -1,17 +1,4 @@
-/**
- * @file rp_sound.cpp
- * @brief Implementation of the audio front end.
- * @ingroup audio
- *
- * Instantiates the PWM audio device on GP28 and the background MP3 decoder.
- *
- * @note The streamed-MP3 music path is no longer a build option. `LINK_MP3` was
- *       retired once resources could be uploaded separately with `picotool`, and
- *       jobSound() now selects between MP3 and the NSF player at run time on
- *       #rp_sound::m_MP3_ENA. It still resolves to the NSF player in practice
- *       here, because setMP3data() has no track table to look tracks up in.
- * @see rp_sound.h, @ref audio_page
- */#include "rp_system.h"
+#include "rp_system.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,32 +8,21 @@
 #include "hardware/regs/rosc.h"
 
 
-#include <BackgroundAudio.h>
+//#include <BackgroundAudio.h>
+#include <BackgroundAudioMP3.h>
 #include <PWMAudio.h>
-
-#include <__example_beepwav.h>
 
 
 extern void BLINK_LED();
 
-/// @brief GPIO carrying the PWM audio output.
-/// @note The comment below refers to GPIO 1 and is stale; the pin is GP28.
 #define PWM_AUDIO_L    (28)
 
 
 // Create the PWM audio device on GPIO 1.   Hook amp/speaker between GPIO1 and convenient GND.
-/**
- * @brief PWM audio output device used for streamed MP3 playback, on #PWM_AUDIO_L.
- * @return The constructed device.
- * @note This is an object definition, not a function. Doxygen parses the
- *       constructor call as a declaration and lists it under functions.
- * @note Unrelated to the music channels, which the console's own APU plays.
- */
 PWMAudio pwm( PWM_AUDIO_L );
 
 //BackgroundAudioMixer<640> mixer(pwm, 44100);
 //ROMBackgroundAudioWAV wav;
-/// @brief Background MP3 decoder feeding the PWM audio device.
 ROMBackgroundAudioMP3 BMP;
 
 
