@@ -137,3 +137,38 @@ The distributed artifacts have known hashes. After a rebuild with `dbdate.h` pin
 
 Bank usage from the assembler log: main bank 2 uses 1855/6337 bytes and bank 3 uses
 5610/2582; banks 0 and 1 are empty. The fix bank uses 3051/5141.
+
+## Optional native build on Linux
+
+Steps 1 and 2 can also be built without Windows, using
+[NESASM CE](https://github.com/ClusterM/nesasm) at commit
+`6fc41cda37b934aa29aa2639d0baa74424268e31`, which reproduces the vendor PRG byte for
+byte. The Windows tools above stay the reference; this path changes nothing under
+`tutorial_project/`.
+
+```sh
+tools/build/fetch_nesasm.sh    # clones and builds the pinned assembler into .cache/nesasm
+tools/build/build_rom.sh       # writes build/rom/
+```
+
+`build_rom.sh` assembles scratch copies of `BOOTROM_FIX` and `BOOTROM`, then:
+
+- cuts the fix bank at `0x7010` exactly like `BOOTROM_FIX/m.BAT`, and fails unless it
+  equals `BOOTROM/bootrom_fixr.bin` -- the permanent bank must never change;
+- normalizes the iNES header: NESASM CE writes a NES 2.0 header (byte 7 = `0x08`,
+  byte 11 = `0x07`) where nesasm 2.51 writes zeros. `tools/nes/normalize_ines.py`
+  clears exactly those two bytes and never touches PRG;
+- checks that `rom.NES` ends with that fix bank, and, while `dbdate.h` holds the
+  distributed stamp `2026-0205-1239`, that it matches the distributed MD5
+  `B6CD675342B6C8AD79E537E2C9860579`. A changed ROM under that stamp fails: consoles
+  that already have the stamp would never reflash to it;
+- keeps the listings (`*.lst`), segment usage (`*.log`) and FCEUX symbol files
+  (`rom.NES.*.nl`) for debugging and NMI timing work.
+
+A changed ROM therefore needs a new stamp. Edit `dbdate.h` and commit it for a ROM
+you can rebuild exactly, or pass `--stamp`, which regenerates `dbdate.h` in the
+scratch copy with the current time like `BOOTROM/m.BAT`. A new stamp skips the MD5
+gate; the version coupling above still applies to such a ROM.
+`--out DIR` changes the output directory, and `NESASM_BIN` selects another
+assembler. The Python helpers in `tools/nes/` (`bincut`, `normalize_ines`,
+`check_fixbank`) are tested with `python3 -m pytest tests`.
