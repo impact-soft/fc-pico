@@ -11,3 +11,7 @@ __pycache__/
 
 # working notes for AI assistants; internal, not part of the project
 CLAUDE.md
+
+# local build outputs and tool caches
+/build/
+/.cache/
